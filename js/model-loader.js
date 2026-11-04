@@ -51,44 +51,70 @@
     return buf.buffer;
   }
 
-  // Returns a shared segmenter (one model in memory, reused for every image and frame).
+  // Loads ONNX Runtime with a normal <script> tag (works where importScripts in a Worker failed).
+  function tryScript(url) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = url;
+      s.onload = () => (window.ort ? resolve(window.ort) : reject(new Error('ort غیرفعال بعد از ' + url)));
+      s.onerror = () => reject(new Error('بارگذاری ناموفق: ' + url));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function loadOrt() {
+    if (window.ort) return window.ort;
+    let lastErr = null;
+    for (const src of CFG.ORT_SOURCES) {
+      try {
+        const ort = await tryScript(new URL(src.url, location.href).href);
+        ort.env.wasm.wasmPaths = new URL(src.wasm, location.href).href;
+        ort.env.wasm.numThreads = 1; // single thread: no cross-origin isolation needed
+        return ort;
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw new Error('ONNX Runtime نتوانست بارگذاری شود: ' + (lastErr && lastErr.message));
+  }
+
+  // Shared segmenter: one session reused for every image and video frame.
   function getSegmenter(onProgress) {
     if (segPromise) return segPromise;
     segPromise = (async () => {
       const modelBuffer = await fetchModel(onProgress);
-      const worker = new Worker('js/worker.js');
-      const pending = new Map();
-      let nextId = 1;
+      const ort = await loadOrt();
+      let session = null;
       let provider = 'wasm';
-      worker.onmessage = (e) => {
-        const m = e.data;
-        const p = pending.get(m.id);
-        if (!p) return;
-        pending.delete(m.id);
-        if (m.type === 'result') p.resolve(new Float32Array(m.mask));
-        else p.reject(new Error(m.message));
-      };
-      await new Promise((resolve, reject) => {
-        const onInit = (e) => {
-          const m = e.data;
-          if (m.type === 'ready') { worker.removeEventListener('message', onInit); provider = m.provider; resolve(); }
-          else if (m.type === 'error') { worker.removeEventListener('message', onInit); reject(new Error(m.message)); }
-        };
-        worker.addEventListener('message', onInit);
-        worker.addEventListener('error', (e) => { reject(new Error('Worker: ' + (e.message || 'load failed'))); });
-        const ortSources = CFG.ORT_SOURCES.map((s) => ({ url: new URL(s.url, location.href).href, wasm: new URL(s.wasm, location.href).href }));
-        worker.postMessage({ type: 'init', ortSources, webgpu: !!navigator.gpu, modelBuffer }, [modelBuffer]);
-      });
+      if (navigator.gpu) {
+        try {
+          session = await ort.InferenceSession.create(modelBuffer, { executionProviders: ['webgpu', 'wasm'], graphOptimizationLevel: 'all' });
+          provider = 'webgpu';
+        } catch (e) {
+          session = null;
+        }
+      }
+      if (!session) {
+        session = await ort.InferenceSession.create(modelBuffer, { executionProviders: ['wasm'], graphOptimizationLevel: 'all' });
+      }
+      const inName = session.inputNames[0];
+      const outName = session.outputNames[0];
+      const S = CFG.INPUT_SIZE;
       return {
         provider,
-        segment(input) {
-          return new Promise((resolve, reject) => {
-            const id = nextId++;
-            pending.set(id, { resolve, reject });
-            worker.postMessage({ type: 'infer', id, data: input }, [input.buffer]);
-          });
+        async segment(input) {
+          const feeds = {};
+          feeds[inName] = new ort.Tensor('float32', input, [1, 3, S, S]);
+          const out = await session.run(feeds);
+          const raw = out[outName].data;
+          let min = Infinity, max = -Infinity;
+          for (let i = 0; i < raw.length; i++) { if (raw[i] < min) min = raw[i]; if (raw[i] > max) max = raw[i]; }
+          // logits get squashed to 0..1, probabilities are kept as they are
+          const needSigmoid = min < 0 || max > 1;
+          const mask = new Float32Array(raw.length);
+          for (let i = 0; i < raw.length; i++) mask[i] = needSigmoid ? 1 / (1 + Math.exp(-raw[i])) : raw[i];
+          return mask;
         },
-        dispose() { worker.terminate(); segPromise = null; },
       };
     })().catch((err) => { segPromise = null; throw err; });
     return segPromise;
