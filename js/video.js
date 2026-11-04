@@ -51,7 +51,7 @@
   function friendly(err) {
     const msg = String((err && err.message) || err);
     if (/memory|out of/i.test(msg)) return 'حافظه مرورگر برای این ویدیو کافی نیست. ویدیوی کوتاه‌تر یا با وضوح کمتر امتحان کنید.';
-    if (/WebAssembly|SharedArrayBuffer/i.test(msg)) return 'مرورگر شما از FFmpeg در حالت فعلی پشتیبانی نمی‌کند. Chrome یا Edge جدید امتحان کنید.';
+    if (/WebAssembly|SharedArrayBuffer|Worker/i.test(msg)) return 'FFmpeg یا پردازش هوش مصنوعی در این مرورگر اجرا نشد. جزئیات: ' + msg.slice(0, 300);
     return msg;
   }
 

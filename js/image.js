@@ -21,7 +21,7 @@
     const msg = String((err && err.message) || err);
     if (/memory|out of/i.test(msg)) return 'حافظه دستگاه برای این تصویر کافی نیست. تصویر کوچک‌تری امتحان کنید.';
     if (/Failed to fetch|NetworkError/i.test(msg)) return 'دانلود مدل ناموفق بود. اتصال اینترنت را بررسی کنید.';
-    if (/WebAssembly|webgpu|Worker/i.test(msg)) return 'مرورگر یا دستگاه شما از پردازش هوش مصنوعی پشتیبانی کامل ندارد. مرورگر جدیدتر (Chrome یا Edge) امتحان کنید.';
+    if (/WebAssembly|webgpu|Worker/i.test(msg)) return 'پردازش هوش مصنوعی در این مرورگر اجرا نشد. جزئیات: ' + msg.slice(0, 300);
     return msg;
   }
 

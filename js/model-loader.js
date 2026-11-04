@@ -5,31 +5,48 @@
   let segPromise = null;
 
   // Downloads the model once and keeps it in the browser's Cache Storage.
+  // Streams straight into the cache so the phone never holds two full copies in memory.
   async function fetchModel(onProgress) {
     let cache = null;
     try { cache = await caches.open('bg-studio-models-v1'); } catch (e) { cache = null; }
-    const cached = cache ? await cache.match(CFG.MODEL_URL) : null;
-    if (cached) { onProgress && onProgress(1); return cached.arrayBuffer(); }
+    if (cache) {
+      const hit = await cache.match(CFG.MODEL_URL);
+      if (hit) { onProgress && onProgress(1); return hit.arrayBuffer(); }
+    }
 
     const res = await fetch(CFG.MODEL_URL);
     if (!res.ok) throw new Error('دانلود مدل ناموفق بود (کد ' + res.status + ').');
     const total = Number(res.headers.get('content-length')) || CFG.MODEL_SIZE_HINT;
-    const reader = res.body.getReader();
-    const chunks = [];
     let got = 0;
+    const counter = new TransformStream({
+      transform(chunk, controller) {
+        got += chunk.byteLength;
+        onProgress && onProgress(Math.min(got / total, 0.99));
+        controller.enqueue(chunk);
+      },
+    });
+    const body = res.body.pipeThrough(counter);
+
+    if (cache) {
+      await cache.put(CFG.MODEL_URL, new Response(body, { headers: { 'Content-Type': 'application/octet-stream' } }));
+      const stored = await cache.match(CFG.MODEL_URL);
+      onProgress && onProgress(1);
+      return stored.arrayBuffer();
+    }
+
+    // No Cache Storage available: read into memory (uses more RAM)
+    const reader = body.getReader();
+    const chunks = [];
+    let size = 0;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
       chunks.push(value);
-      got += value.length;
-      onProgress && onProgress(Math.min(got / total, 0.99));
+      size += value.byteLength;
     }
-    const buf = new Uint8Array(got);
+    const buf = new Uint8Array(size);
     let off = 0;
-    for (const c of chunks) { buf.set(c, off); off += c.length; }
-    if (cache) {
-      try { await cache.put(CFG.MODEL_URL, new Response(buf.slice(0), { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) { /* quota: skip caching */ }
-    }
+    for (const c of chunks) { buf.set(c, off); off += c.byteLength; }
     onProgress && onProgress(1);
     return buf.buffer;
   }
@@ -58,6 +75,7 @@
           else if (m.type === 'error') { worker.removeEventListener('message', onInit); reject(new Error(m.message)); }
         };
         worker.addEventListener('message', onInit);
+        worker.addEventListener('error', (e) => { reject(new Error('Worker: ' + (e.message || 'load failed'))); });
         worker.postMessage({ type: 'init', ortUrl: CFG.ORT_URL, wasmBase: CFG.ORT_WASM_BASE, webgpu: !!navigator.gpu, modelBuffer }, [modelBuffer]);
       });
       return {
