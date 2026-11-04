@@ -7,9 +7,19 @@ self.onmessage = async (e) => {
   const m = e.data;
   try {
     if (m.type === 'init') {
-      importScripts(m.ortUrl);
-      ort = self.ort;
-      ort.env.wasm.wasmPaths = m.wasmBase;
+      let lastErr = null;
+      for (const src of m.ortSources) {
+        try {
+          importScripts(src.url);
+          ort = self.ort;
+          ort.env.wasm.wasmPaths = src.wasm;
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      if (!ort) throw new Error('ONNX Runtime نتوانست بارگذاری شود (هیچ CDN در دسترس نبود): ' + (lastErr && lastErr.message));
       ort.env.wasm.numThreads = Math.max(1, Math.min(4, self.navigator.hardwareConcurrency || 1));
       let provider = 'wasm';
       if (m.webgpu) {

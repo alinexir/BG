@@ -3,8 +3,11 @@
 window.BG_CONFIG = {
   MODEL_URL: 'https://huggingface.co/onnx-community/BiRefNet-ONNX/resolve/main/onnx/model.onnx',
   MODEL_SIZE_HINT: 973 * 1024 * 1024,
-  ORT_URL: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js',
-  ORT_WASM_BASE: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/',
+  // ONNX Runtime sources, tried in order (worker falls back if one CDN is blocked on the device)
+  ORT_SOURCES: [
+    { url: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js', wasm: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/' },
+    { url: 'https://unpkg.com/onnxruntime-web@1.19.2/dist/ort.min.js', wasm: 'https://unpkg.com/onnxruntime-web@1.19.2/dist/' },
+  ],
   FFMPEG_URL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/umd/ffmpeg.js',
   FFMPEG_UTIL_URL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js',
   FFMPEG_CORE_URL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd/ffmpeg-core.js',
