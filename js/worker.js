@@ -16,7 +16,11 @@ self.onmessage = async (e) => {
             // importScripts failed on this device: fetch the same file and evaluate it globally
             const res = await fetch(src.url);
             if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + src.url);
-            (0, eval)(await res.text());
+            // ort.min.js starts with "use strict", so eval would keep `var ort` local.
+            // Loading it as a blob script keeps the global declaration.
+            const blobUrl = URL.createObjectURL(new Blob([await res.text()], { type: 'text/javascript' }));
+            importScripts(blobUrl);
+            URL.revokeObjectURL(blobUrl);
           }
           ort = self.ort;
           if (!ort) throw new Error('ort global missing after loading ' + src.url);
