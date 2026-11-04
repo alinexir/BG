@@ -76,7 +76,8 @@
         };
         worker.addEventListener('message', onInit);
         worker.addEventListener('error', (e) => { reject(new Error('Worker: ' + (e.message || 'load failed'))); });
-        worker.postMessage({ type: 'init', ortSources: CFG.ORT_SOURCES, webgpu: !!navigator.gpu, modelBuffer }, [modelBuffer]);
+        const ortSources = CFG.ORT_SOURCES.map((s) => ({ url: new URL(s.url, location.href).href, wasm: new URL(s.wasm, location.href).href }));
+        worker.postMessage({ type: 'init', ortSources, webgpu: !!navigator.gpu, modelBuffer }, [modelBuffer]);
       });
       return {
         provider,

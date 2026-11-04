@@ -5,6 +5,8 @@ window.BG_CONFIG = {
   MODEL_SIZE_HINT: 973 * 1024 * 1024,
   // ONNX Runtime sources, tried in order (worker falls back if one CDN is blocked on the device)
   ORT_SOURCES: [
+    // self-hosted copy (put ort.min.js and the ort-wasm*.wasm files in js/ort/)
+    { url: 'js/ort/ort.min.js', wasm: 'js/ort/' },
     { url: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/ort.min.js', wasm: 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.19.2/dist/' },
     { url: 'https://unpkg.com/onnxruntime-web@1.19.2/dist/ort.min.js', wasm: 'https://unpkg.com/onnxruntime-web@1.19.2/dist/' },
   ],

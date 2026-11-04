@@ -10,8 +10,16 @@ self.onmessage = async (e) => {
       let lastErr = null;
       for (const src of m.ortSources) {
         try {
-          importScripts(src.url);
+          try {
+            importScripts(src.url);
+          } catch (importErr) {
+            // importScripts failed on this device: fetch the same file and evaluate it globally
+            const res = await fetch(src.url);
+            if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + src.url);
+            (0, eval)(await res.text());
+          }
           ort = self.ort;
+          if (!ort) throw new Error('ort global missing after loading ' + src.url);
           ort.env.wasm.wasmPaths = src.wasm;
           lastErr = null;
           break;
